@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#02060a">
+<title>Jarvis</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2711%27 fill=%27none%27 stroke=%27%232fc6ee%27 stroke-width=%273%27/%3E%3C/svg%3E">
+<style>
+  :root {
+    --schirm:#02060a; --panel:#04131b; --linie:#1a8fb5; --linie-dunkel:#0e4a63;
+    --gitter:rgba(11,58,77,.5); --cyan:#2fc6ee; --hell:#7fe9ff; --kern:#04202d;
+    --orange:#f0a02a; --text:#e9fdff; --text-leise:#5fb8d4; --auf-hell:#02060a;
+    color-scheme: dark;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; }
+  body { background-color:var(--schirm); color:var(--text);
+         font-family:"Rajdhani","Segoe UI",system-ui,sans-serif; font-weight:600;
+         display:flex; flex-direction:column; height:100dvh; overflow:hidden; }
+  #wellen { position:fixed; inset:0; width:100%; height:100%; z-index:0; pointer-events:none; }
+
+  #kopf { flex:none; display:flex; justify-content:space-between; align-items:flex-start;
+          padding:calc(14px + env(safe-area-inset-top)) 18px 0; position:relative; z-index:1; }
+  #uhr, #tag { margin:0; font-weight:700; font-size:40px; line-height:1;
+               font-variant-numeric:tabular-nums; }
+  .datum { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+  #monat { padding:3px 10px 2px; background:var(--orange); color:var(--auf-hell);
+           font-size:15px; font-weight:700; letter-spacing:.5px; line-height:1.2; }
+  #punkt { position:absolute; left:50%; top:calc(20px + env(safe-area-inset-top));
+           width:10px; height:10px; border-radius:50%; background:#e44;
+           transform:translateX(-50%); box-shadow:0 0 8px currentColor; }
+  #punkt.an { background:#2ee66b; }
+
+  #ringbox { flex:none; display:flex; justify-content:center; align-items:center;
+             height:min(54vw, 34dvh); margin-top:6px; position:relative; z-index:1; }
+  #ring { height:100%; aspect-ratio:1; overflow:visible; }
+  .r-aussen { stroke:var(--linie); stroke-width:3; fill:none; }
+  #segmente { stroke:var(--cyan); stroke-width:14; fill:none; }
+  #segmente-hell { stroke:var(--hell); stroke-width:14; fill:none; opacity:0; }
+  #hell { stroke:var(--hell); stroke-width:3; fill:none; }
+  #punkte { stroke:var(--cyan); stroke-width:2; fill:none; stroke-dasharray:1.5 7.5; }
+  .r-kern { fill:var(--kern); }
+  .r-name { fill:var(--text); font-weight:700; font-size:34px; letter-spacing:5px;
+            text-anchor:middle; dominant-baseline:central; }
+
+  #chat { flex:1 1 0; min-height:0; overflow-y:auto; padding:8px 18px;
+          display:flex; flex-direction:column; justify-content:flex-end; gap:8px;
+          position:relative; z-index:1; }
+  .nachricht { max-width:84%; padding:8px 13px 7px; border:1px solid var(--linie-dunkel);
+               border-radius:14px; background:var(--panel); font-size:18px; line-height:1.25;
+               overflow-wrap:anywhere; }
+  .ich { align-self:flex-end; border-color:var(--cyan); background:var(--kern);
+         border-bottom-right-radius:4px; }
+  .jarvis { align-self:flex-start; color:var(--hell); border-bottom-left-radius:4px; }
+
+  #leiste { flex:none; display:flex; gap:8px; position:relative; z-index:1;
+            padding:8px 14px calc(12px + env(safe-area-inset-bottom)); }
+  input { flex:1; min-width:0; height:48px; padding:0 14px; border-radius:12px;
+          border:1.5px solid var(--linie); background:var(--panel); color:var(--text);
+          font:600 17px/1 "Rajdhani","Segoe UI",system-ui,sans-serif; outline:none; }
+  input::placeholder { color:var(--text-leise); opacity:1; }
+  button { min-height:48px; padding:0 16px; border-radius:12px; border:1.5px solid var(--cyan);
+           background:var(--kern); color:var(--text);
+           font:700 18px/1 "Rajdhani","Segoe UI",system-ui,sans-serif; }
+  button:active { background:var(--cyan); color:var(--auf-hell); }
+  input:focus-visible, button:focus-visible { outline:2px solid var(--hell); outline-offset:2px; }
+
+  #punkt.online { background:#f0a02a; }
+  #zahn { position:absolute; left:50%; top:calc(44px + env(safe-area-inset-top)); transform:translateX(-50%);
+          min-height:34px; height:34px; padding:0 12px; font-size:15px; z-index:2; }
+  #einstellungen { position:fixed; inset:0; z-index:5; background:#02060a; overflow-y:auto;
+                   padding:calc(18px + env(safe-area-inset-top)) 18px 28px; }
+  #einstellungen[hidden] { display:none; }
+  #einstellungen h2 { margin:0 0 4px; font-size:24px; letter-spacing:3px; color:var(--hell); }
+  #einstellungen p { margin:0 0 14px; color:var(--text-leise); font-size:15px; line-height:1.3; }
+  #einstellungen label { display:block; margin:12px 0 4px; font-size:15px; letter-spacing:1px; color:var(--text-leise); }
+  #einstellungen input { width:100%; flex:none; }
+  .einst-knoepfe { display:flex; gap:10px; margin-top:20px; }
+  .einst-knoepfe button { flex:1; }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap">
+</head>
+<body>
+  <canvas id="wellen" aria-hidden="true"></canvas>
+  <div id="kopf">
+    <p id="uhr">--:--</p>
+    <span id="punkt"></span>
+    <div class="datum">
+      <p id="tag">--</p>
+      <span id="monat">&nbsp;</span>
+    </div>
+  </div>
+
+  <button id="zahn" aria-label="Einstellungen">Einstellungen</button>
+
+  <div id="ringbox">
+    <svg id="ring" viewBox="0 0 400 400" role="img" aria-label="JARVIS-Ring">
+      <defs>
+        <filter id="leuchten" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="4" result="unscharf"/>
+          <feMerge><feMergeNode in="unscharf"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <g filter="url(#leuchten)">
+        <circle class="r-aussen" cx="200" cy="200" r="170"/>
+        <g id="segmente"></g>
+        <g id="segmente-hell"></g>
+        <circle id="hell" cx="200" cy="200" r="116"/>
+        <circle id="punkte" cx="200" cy="200" r="96"/>
+      </g>
+      <circle class="r-kern" cx="200" cy="200" r="84"/>
+      <text class="r-name" x="203" y="201">JARVIS</text>
+    </svg>
+  </div>
+
+  <div id="chat"></div>
+
+    <div id="einstellungen" hidden>
+    <h2>EINSTELLUNGEN</h2>
+    <p>Alles bleibt nur auf diesem Handy gespeichert.</p>
+    <label for="f-gemini">GEMINI-SCHLÜSSEL (für Fragen ohne PC)</label>
+    <input id="f-gemini" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <label for="f-azure">AZURE-SPEECH-SCHLÜSSEL (für die Stimme Conrad)</label>
+    <input id="f-azure" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <label for="f-region">AZURE-REGION</label>
+    <input id="f-region" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <label for="f-pc">PC-ADRESSE (optional, mit https://)</label>
+    <input id="f-pc" type="text" placeholder="https://mein-pc.tailnet.ts.net" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <label for="f-code">ZUGANGSCODE (wie am PC)</label>
+    <input id="f-code" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <label for="f-modell">GEMINI-MODELL</label>
+    <input id="f-modell" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <label for="f-stimme">STIMME</label>
+    <input id="f-stimme" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <div class="einst-knoepfe">
+      <button id="einst-zu" type="button">Schließen</button>
+      <button id="einst-ok" type="button">Speichern</button>
+    </div>
+  </div>
+
+  <div id="leiste">
+    <input id="eingabe" placeholder="Befehl" aria-label="Befehl eingeben" autocomplete="off" enterkeyhint="send">
+    <button id="mik" aria-label="Spracheingabe">&#127908;</button>
+    <button id="senden">Senden</button>
+  </div>
+
+<script>
+(function () {
+
+  /* ---------- Einstellungen (nur auf diesem Handy gespeichert) ---------- */
+  var FELDER = ["pc", "code", "gemini", "modell", "azure", "region", "stimme"];
+  var STANDARD = {pc: "", code: "", gemini: "", modell: "gemini-flash-latest",
+                  azure: "", region: "germanywestcentral", stimme: "de-DE-ConradNeural"};
+  var cfg = {};
+
+  function laden() {
+    var roh = {};
+    try { roh = JSON.parse(localStorage.getItem("jarvis_handy") || "{}"); } catch (e) { roh = {}; }
+    FELDER.forEach(function (f) { cfg[f] = (roh[f] !== undefined && roh[f] !== "") ? roh[f] : STANDARD[f]; });
+  }
+  function speichern() {
+    try { localStorage.setItem("jarvis_handy", JSON.stringify(cfg)); } catch (e) {}
+  }
+  laden();
+
+  var el = function (id) { return document.getElementById(id); };
+  var chat = el("chat");
+  var eingabe = el("eingabe");
+
+  function zeige(text, wer) {
+    var d = document.createElement("div");
+    d.className = "nachricht " + wer;
+    d.textContent = text;
+    chat.appendChild(d);
+    while (chat.children.length > 30) { chat.removeChild(chat.firstChild); }
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  /* ---------- Einstellungsfenster ---------- */
+  var dlg = el("einstellungen");
+  function feldWerte() {
+    FELDER.forEach(function (f) { el("f-" + f).value = cfg[f]; });
+  }
+  function oeffneEinst() { feldWerte(); dlg.hidden = false; }
+  el("zahn").onclick = oeffneEinst;
+  el("einst-zu").onclick = function () { dlg.hidden = true; };
+  el("einst-ok").onclick = function () {
+    FELDER.forEach(function (f) {
+      var v = el("f-" + f).value.trim();
+      if (f === "pc") { v = v.replace(/[/]+$/, ""); }
+      cfg[f] = v || STANDARD[f];
+    });
+    speichern();
+    dlg.hidden = true;
+    pruefen();
+    zeige("Einstellungen gespeichert.", "jarvis");
+  };
+
+  /* ---------- Uhrzeit und Datum ---------- */
+  var MONATE = ["JANUAR","FEBRUAR","MÄRZ","APRIL","MAI","JUNI","JULI","AUGUST",
+                "SEPTEMBER","OKTOBER","NOVEMBER","DEZEMBER"];
+  function zwei(n) { return (n < 10 ? "0" : "") + n; }
+  function zeit() {
+    var j = new Date();
+    el("uhr").textContent = zwei(j.getHours()) + ":" + zwei(j.getMinutes());
+    el("tag").textContent = zwei(j.getDate());
+    el("monat").textContent = MONATE[j.getMonth()];
+  }
+  zeit();
+  setInterval(zeit, 1000);
+
+  /* ---------- Ring und Wellen ---------- */
+  function bogen(r, start, laenge) {
+    function p(a) {
+      var t = a * Math.PI / 180;
+      return (200 + r * Math.cos(t)).toFixed(2) + " " + (200 + r * Math.sin(t)).toFixed(2);
+    }
+    return "M" + p(start) + " A" + r + " " + r + " 0 0 1 " + p(start + laenge);
+  }
+  var SEG = [[10,62],[92,38],[150,58],[232,26],[272,52]];
+  var pfade = SEG.map(function (s) { return '<path d="' + bogen(148, s[0], s[1]) + '"/>'; }).join("");
+  var segmente = el("segmente"), segmenteHell = el("segmente-hell"), hell = el("hell"), punkte = el("punkte");
+  segmente.innerHTML = pfade;
+  segmenteHell.innerHTML = pfade;
+
+  var weniger = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var MAX = weniger ? 80 : 170;
+  var offen = 0, spricht = false, nachBis = 0;
+  var tempo = 0, winkel = 0, gegen = 0, puls = 0;
+  var letzte = performance.now();
+
+  var cv = el("wellen");
+  var cx = cv.getContext("2d");
+  var bw = 0, bh = 0, dpr = 1;
+  var WELLEN = [
+    {y:0.44, amp:26, f:1.3, v:0.35, a:0.30, d:1.6},
+    {y:0.44, amp:20, f:1.9, v:-0.50, a:0.22, d:1.2},
+    {y:0.44, amp:34, f:0.9, v:0.22, a:0.18, d:1.0},
+    {y:0.44, amp:14, f:2.6, v:0.70, a:0.14, d:1.0}
+  ];
+  var phase = [0, 1, 2, 3];
+  function groesse() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    bw = window.innerWidth; bh = window.innerHeight;
+    cv.width = Math.round(bw * dpr); cv.height = Math.round(bh * dpr);
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  groesse();
+  window.addEventListener("resize", groesse);
+
+  function wellenZeichnen(dt, anteil) {
+    cx.clearRect(0, 0, bw, bh);
+    var glow = cx.createRadialGradient(bw / 2, bh * 0.30, 10, bw / 2, bh * 0.30, bw * 0.9);
+    glow.addColorStop(0, "rgba(47,198,238," + (0.10 + 0.10 * anteil).toFixed(3) + ")");
+    glow.addColorStop(1, "rgba(47,198,238,0)");
+    cx.fillStyle = glow;
+    cx.fillRect(0, 0, bw, bh);
+    for (var i = 0; i < WELLEN.length; i++) {
+      var w = WELLEN[i];
+      phase[i] += w.v * dt * (1 + anteil * 3.5);
+      var lauf = cx.createLinearGradient(0, 0, bw, 0);
+      var al = (w.a * (1 + anteil * 0.8)).toFixed(3);
+      lauf.addColorStop(0, "rgba(127,233,255,0)");
+      lauf.addColorStop(0.5, "rgba(127,233,255," + al + ")");
+      lauf.addColorStop(1, "rgba(127,233,255,0)");
+      cx.strokeStyle = lauf;
+      cx.lineWidth = w.d;
+      cx.beginPath();
+      for (var x = 0; x <= bw; x += 6) {
+        var u = x / bw;
+        var huelle = Math.sin(Math.PI * u);
+        var y = bh * w.y + Math.sin(u * Math.PI * 2 * w.f + phase[i] * 2) * w.amp * huelle * (1 + anteil * 0.9)
+                + Math.sin(u * Math.PI * 2 * w.f * 2.3 - phase[i]) * w.amp * 0.3 * huelle;
+        if (x === 0) { cx.moveTo(x, y); } else { cx.lineTo(x, y); }
+      }
+      cx.stroke();
+    }
+  }
+
+  function frame(t) {
+    var dt = Math.min((t - letzte) / 1000, 0.05);
+    letzte = t;
+    var arbeitet = offen > 0 || spricht || t < nachBis;
+    tempo += ((arbeitet ? MAX : 0) - tempo) * (1 - Math.exp(-dt * 4));
+    if (!arbeitet && tempo < 0.4) { tempo = 0; }
+    wellenZeichnen(weniger ? 0 : dt, tempo / MAX);
+    if (tempo > 0) {
+      var anteil = tempo / MAX;
+      winkel = (winkel + tempo * dt) % 360;
+      gegen = (gegen - tempo * 0.7 * dt) % 360;
+      puls += tempo * dt * 0.05;
+      var d = "rotate(" + winkel.toFixed(2) + " 200 200)";
+      segmente.setAttribute("transform", d);
+      segmenteHell.setAttribute("transform", d);
+      segmenteHell.style.opacity = anteil.toFixed(3);
+      punkte.setAttribute("transform", "rotate(" + gegen.toFixed(2) + " 200 200)");
+      hell.setAttribute("r", (116 + Math.sin(puls) * 3 * anteil).toFixed(2));
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  /* ---------- Stimme: Azure (Conrad), sonst Handy-Stimme ---------- */
+  var player = new Audio();
+  var STILLE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+
+  function audioFreischalten() {
+    try { player.src = STILLE; var p = player.play(); if (p && p.catch) { p.catch(function () {}); } } catch (e) {}
+  }
+
+  function xml(t) {
+    return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function handyStimme(text) {
+    return new Promise(function (fertig) {
+      if (!window.speechSynthesis) { fertig(); return; }
+      var s = new SpeechSynthesisUtterance(text);
+      s.lang = "de-DE";
+      s.onend = fertig; s.onerror = fertig;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(s);
+    });
+  }
+
+  function azureStimme(text) {
+    var ssml = "<speak version='1.0' xml:lang='de-DE'><voice name='" + cfg.stimme + "'>" + xml(text) + "</voice></speak>";
+    return fetch("https://" + cfg.region + ".tts.speech.microsoft.com/cognitiveservices/v1", {
+      method: "POST",
+      headers: {
+        "Ocp-Apim-Subscription-Key": cfg.azure,
+        "Content-Type": "application/ssml+xml",
+        "X-Microsoft-OutputFormat": "audio-16khz-128kbitrate-mono-mp3"
+      },
+      body: ssml
+    }).then(function (r) {
+      if (!r.ok) { throw new Error("Azure " + r.status); }
+      return r.blob();
+    }).then(function (blob) {
+      return new Promise(function (fertig, fehler) {
+        var url = URL.createObjectURL(blob);
+        player.onended = function () { URL.revokeObjectURL(url); fertig(); };
+        player.onerror = function () { URL.revokeObjectURL(url); fehler(new Error("Wiedergabe")); };
+        player.src = url;
+        var p = player.play();
+        if (p && p.catch) { p.catch(fehler); }
+      });
+    });
+  }
+
+  function sprechen(text) {
+    spricht = true;
+    var ende = function () { spricht = false; };
+    var plan = cfg.azure ? azureStimme(text).catch(function () { return handyStimme(text); }) : handyStimme(text);
+    plan.then(ende, ende);
+  }
+
+  /* ---------- Antworten ---------- */
+  function mitZeitlimit(ms) {
+    var c = new AbortController();
+    var t = setTimeout(function () { c.abort(); }, ms);
+    return {signal: c.signal, ende: function () { clearTimeout(t); }};
+  }
+
+  // 1) Zuerst den PC fragen (nur wenn eine Adresse eingetragen ist)
+  // Erst eine schnelle Vorprüfung (3 Sekunden): ist der PC überhaupt erreichbar?
+  function pcErreichbar() {
+    if (!cfg.pc) { return Promise.resolve(false); }
+    var z = mitZeitlimit(3000);
+    return fetch(cfg.pc + "/status", {signal: z.signal}).then(function (r) {
+      z.ende();
+      return r.ok;
+    }).catch(function () { z.ende(); return false; });
+  }
+
+  function pcFragen(text) {
+    return pcErreichbar().then(function (da) {
+      return da ? pcAntwort(text) : null;
+    });
+  }
+
+  function pcAntwort(text) {
+    var z = mitZeitlimit(60000);
+    return fetch(cfg.pc + "/befehl", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text: text, code: cfg.code}),
+      signal: z.signal
+    }).then(function (r) {
+      z.ende();
+      return r.json();
+    }).then(function (d) {
+      return (d && d.antwort) ? d.antwort : null;
+    }).catch(function () { z.ende(); return null; });
+  }
+
+  var verlauf = [];
+
+  // 2) Wenn der PC nicht antwortet: Gemini mit Google-Suche
+  function geminiFragen(text) {
+    if (!cfg.gemini) {
+      return Promise.reject(new Error("Kein Gemini-Schlüssel eingetragen. Tippe oben auf das Zahnrad."));
+    }
+    var jetzt = new Date().toLocaleString("de-DE");
+    var system = "Du bist Jarvis, ein deutscher Sprachassistent. Jetzt ist " + jetzt + ". " +
+      "Antworte auf Deutsch in höchstens zwei kurzen Sätzen, ohne Aufzählung und ohne Sonderzeichen, " +
+      "weil die Antwort vorgelesen wird. Suche bei Bedarf im Internet. Wenn du etwas nicht sicher weißt, sag das kurz.";
+    verlauf.push({role: "user", parts: [{text: text}]});
+    var z = mitZeitlimit(30000);
+    var url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.modell) +
+              ":generateContent?key=" + encodeURIComponent(cfg.gemini);
+    return fetch(url, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        systemInstruction: {parts: [{text: system}]},
+        contents: verlauf.slice(-8),
+        tools: [{google_search: {}}]
+      }),
+      signal: z.signal
+    }).then(function (r) {
+      z.ende();
+      if (!r.ok) { throw new Error("Gemini " + r.status); }
+      return r.json();
+    }).then(function (d) {
+      var teile = (((d.candidates || [])[0] || {}).content || {}).parts || [];
+      var antwort = teile.map(function (t) { return t.text || ""; }).join(" ").replace(/[*#_`>]/g, "").replace(/\s+/g, " ").trim();
+      if (!antwort) { throw new Error("Leere Antwort"); }
+      verlauf.push({role: "model", parts: [{text: antwort}]});
+      return antwort;
+    }).catch(function (e) {
+      z.ende();
+      verlauf.pop();
+      throw e;
+    });
+  }
+
+  var PC_WOERTER = /^(öffne|oeffne|starte|schließe|schliesse|beende|fahre|mach|schalte|lauter|leiser|stoppe|pausiere|spiel|spiele)/i;
+
+  function senden(text) {
+    text = (text || "").trim();
+    if (!text) { return; }
+    audioFreischalten();
+    zeige(text, "ich");
+    eingabe.value = "";
+    offen++;
+
+    pcFragen(text).then(function (antwortPc) {
+      if (antwortPc) {
+        // PC hat geantwortet: er spricht selbst, das Handy zeigt nur Text
+        offen--;
+        nachBis = performance.now() + 1000;
+        zeige(antwortPc, "jarvis");
+        return;
+      }
+      if (PC_WOERTER.test(text)) {
+        offen--;
+        zeige("Der PC ist gerade nicht erreichbar. Programme kann ich nur am PC steuern.", "jarvis");
+        return;
+      }
+      return geminiFragen(text).then(function (a) {
+        offen--;
+        nachBis = performance.now() + 1000;
+        zeige(a, "jarvis");
+        sprechen(a);
+      }).catch(function (e) {
+        offen--;
+        zeige("Das hat nicht geklappt: " + e.message, "jarvis");
+      });
+    });
+  }
+
+  el("senden").onclick = function () { senden(eingabe.value); };
+  eingabe.onkeydown = function (e) { if (e.key === "Enter") { senden(eingabe.value); } };
+
+  el("mik").onclick = function () {
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { zeige("Spracheingabe ist in diesem Browser nicht verfügbar.", "jarvis"); return; }
+    audioFreischalten();
+    var r = new SR();
+    r.lang = "de-DE";
+    r.onresult = function (e) { senden(e.results[0][0].transcript); };
+    r.onerror = function () { zeige("Ich habe nichts verstanden.", "jarvis"); };
+    r.start();
+  };
+
+  /* ---------- Verbindungsanzeige: grün = PC erreichbar, orange = nur Online ---------- */
+  function pruefen() {
+    var punkt = el("punkt");
+    if (!cfg.pc) { punkt.className = "online"; return; }
+    var z = mitZeitlimit(4000);
+    fetch(cfg.pc + "/status", {signal: z.signal}).then(function (r) {
+      z.ende();
+      punkt.className = r.ok ? "an" : "online";
+    }).catch(function () { z.ende(); punkt.className = "online"; });
+  }
+  pruefen();
+  setInterval(pruefen, 10000);
+
+  if (!cfg.gemini) {
+    zeige("Willkommen. Tippe oben auf das Zahnrad und trage deinen Gemini-Schlüssel ein.", "jarvis");
+    oeffneEinst();
+  } else {
+    zeige("Wie kann ich helfen?", "jarvis");
+  }
+
+})();
+</script>
+</body>
+</html>
